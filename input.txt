@@ -1,0 +1,22 @@
+int foo
+int bar
+double x
+double y
+string z
+bool success
+int[7] a
+int[7] b
+int[15] c
+double[15] d
+string[7] note
+
+x = y
+foo = b[2] + bar
+foo = y * bar
+z = z - foo
+y = d[4] * x / foo
+success = foo + a[1] << c[7]
+note[2] = x - d[3] * randy
+note[3] = z * note[12]
+success = note[3] >= note[2]
+bar = y * note[2] == foo
