@@ -33,8 +33,8 @@ public class TypeCheck {
 	private static Map<String, String> identifierStrMap = new HashMap<String, String>();
 	private static Map<String, Integer> arraySizesMap = new HashMap<String, Integer>();
 	private static boolean debugMode = false;
-	private static HashSet<String> validTypes = new HashSet();
-		
+	private static HashSet<String> validTypes = new HashSet<String>();
+	
 	public static void main(String[] args) {
 		// read the program input file in from the command line
 
