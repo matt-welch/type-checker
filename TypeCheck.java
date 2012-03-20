@@ -32,7 +32,8 @@ public class TypeCheck {
 */
 	private static Map<String, String> identifierStrMap = new HashMap<String, String>();
 	private static Map<String, Integer> arraySizesMap = new HashMap<String, Integer>();
-	private static boolean debugMode = true;
+	private static boolean debugMode = false;
+	private static HashSet<String> validTypes = new HashSet();
 		
 	public static void main(String[] args) {
 		// read the program input file in from the command line
@@ -69,11 +70,11 @@ public class TypeCheck {
 		}
 	
 		// make a set of the valid type names to check scanned tokens against
-		HashSet<String> validTypes = new HashSet();
 		validTypes.add("bool");
 		validTypes.add("int");
 		validTypes.add("double");
 		validTypes.add("string");
+		
 		
 		String token, strDataType, identifier;
 		// parse through each line in the input file
@@ -99,11 +100,9 @@ public class TypeCheck {
 			// check if a type or not.  if so, parse as declaration, if not parse as definition
 			if(validTypes.contains(strDataType)){// strDataType is a valid data type
 				if(debugMode) System.out.println("\tTYPE:\"" + strDataType + "\"");
-
 				// ensure more tokens on line
 				if (tokenedString.hasMoreTokens()) {
 					// add declaration to map, if array, add size to array-map
-
 					identifier = tokenedString.nextToken();
 					if(debugMode) System.out.println("\tDECLARATION:: \"" + identifier + "\""); 
 					
@@ -113,14 +112,13 @@ public class TypeCheck {
 						identifierStrMap.put(identifier, strDataType);
 						if(debugMode) System.out.println("\t\tAdded to identifier map as \""+ strDataType + "\" type");
 						
+						//add to array map if array
 						if(arrayIndex > 0){
 							arraySizesMap.put(identifier, arrayIndex);
 							if(debugMode) System.out.println("\t\tAdded to arraySizes map with size [" + arrayIndex + "]");
 						}
 					}
 				}
-				
-				
 			}else{// line doesn't lead with a type declaration, so it must be a definition/expression 
 				
 				// reassign first token in definition as LHS of expression
@@ -144,8 +142,10 @@ public class TypeCheck {
 				String RHSType = getRHSType(RHS);
 								
 				// check LHS DataType against RHS DataType
-				if(LHSType == RHSType){
+				if(LHSType.equals(RHSType)){
 					System.out.println(LHSType);
+				}else if(RHSType.equals("Error1") || RHSType.equals("Error2")){
+					// do nothing since error was caught in getRHSType()
 				}else{
 					PrintError(3, LHSToken);
 				}
@@ -158,33 +158,208 @@ public class TypeCheck {
 		// end of program
 	}
 
-	private static Vector<String> convertTokenedStringToVector(StringTokenizer tokenedString){
-		Vector<String> RHS = new Vector<String>();
-		while(tokenedString.hasMoreTokens()){
-			/* build RHS putting tokens into a vector to send to 
-			 * OrderOfOperations parsing functions */
-			RHS.add(tokenedString.nextToken());
+	private static String getRHSType(Vector<String> RHS){
+		String retVal = "double";
+		// reduce arrays to types 
+		RHS = replaceArrayRefs(RHS);
+		if(debugMode) System.out.println("RHS::ArrayRefs replaced: " + RHS.toString());
+
+		// reduce remaining identifiers to types
+		RHS = replaceIdentifiers(RHS);
+		if(debugMode) System.out.println("RHS::Identifiers replaced: " + RHS.toString());
+
+		// reduce mult/div
+		RHS = reduceMultDiv(RHS);
+		if(debugMode) System.out.println("RHS::Mult/Div reduced: " + RHS.toString());
+		
+		// reduce add/sub
+		RHS = reduceAddSub(RHS);
+		if(debugMode) System.out.println("RHS::Add+Sub reduced: " + RHS.toString());
+
+		// reduce <,>,=,>=,<=
+		RHS = reduceEquality(RHS);
+		if(debugMode) System.out.println("RHS::Equality reduced: " + RHS.toString());
+
+
+		if(debugMode) System.out.println("\tTOKEN:\"" + RHS.firstElement() + "\"");
+
+		if(RHS.size() == 1){
+			retVal = RHS.get(0);
+		}
+
+		return retVal;
+	}
+
+	// step 1, replace array references with their types
+	private static Vector<String> replaceArrayRefs(Vector<String> RHS){
+		String token, tokenOrig;
+		for(int i = 0; i < RHS.size(); ++i){
+			token = RHS.elementAt(i);
+			tokenOrig = token;
+			
+			// check if it's an array
+			if(token.contains("[")){
+				// this is an array, strip brackets & parse array index
+//				int arrayIndex = findArrayIndex(token);
+				token = stripArrayBrackets(token);
+			}
+			
+			// TODO: should check array sizes at some point too
+			if(isValidIdentifier(token)){
+				if(identifierStrMap.containsKey( token ) ){
+					RHS.remove(i);
+					String dataType = identifierStrMap.get(token);
+					if(debugMode) System.out.println("\tTOKEN:\"" + tokenOrig + "\" replaced with \""+ dataType +"\"");
+					RHS.insertElementAt(dataType, i);
+				}else{
+					PrintError(1, tokenOrig);
+					RHS.clear();
+					RHS.add("Error1");
+				}
+			}
 		}
 		return RHS;
 	}
 	
-	private static String getRHSType(Vector<String> RHS){
-		while(!RHS.isEmpty()){
-			// reduce array indices
-			
-			// reduce mult/div
-			
-			// reduce add/sub
-					
-			// reduce <,>,=,>=,<=
-			if(debugMode) System.out.println("\tTOKEN:\"" + RHS.firstElement() + "\"");
-			RHS.remove(0);
+	// step 2, replace identifiers with their types
+	private static Vector<String> replaceIdentifiers(Vector<String> RHS){
+		String token;
+		for(int i = 0; i < RHS.size(); ++i){
+			token = RHS.elementAt(i);
+			if(!validTypes.contains(token)){// ensure not already been replaced as arrayRef
+				if(isValidIdentifier(token)){
+					if(identifierStrMap.containsKey( token ) ){
+						RHS.remove(i);
+						String dataType = identifierStrMap.get(token);
+						if(debugMode) System.out.println("\tTOKEN:\"" + token + "\" replaced with \""+ dataType +"\"");
+						RHS.insertElementAt(dataType, i);
+					}else{
+						PrintError(1, token);
+						RHS.clear();
+						RHS.add("Error1");
+					}
+				}
+			}
 		}
-		
-		return "";
+		return RHS;
+	}
+
+	// step 3: replace multiplicatoin.division with their resulting types
+	private static Vector<String> reduceMultDiv(Vector<String> RHS){
+		String token;
+		for(int i = 0; i < RHS.size(); ++i){
+			token = RHS.elementAt(i);
+			if(isMultSymbol(token)){
+				String Lfactor = RHS.elementAt(i-1);
+				String Rfactor = RHS.elementAt(i+1);
+				
+				if(Lfactor.equals(Rfactor)){
+					token = Lfactor;
+					// replace all three with type
+				}else if( (Lfactor.equals("double") && Rfactor.equals("int")) || 
+						(Lfactor.equals("int") && Rfactor.equals("double")) )
+				{	// double-int math is always widening
+					// TODO narrowing on assignment must be checked
+					token = "double";
+				}else{
+					// error on expression type (2), clear and return error
+					PrintError(2, Lfactor + ", " + Rfactor);
+					RHS.clear();
+					RHS.add("Error2");
+					return RHS;
+				}
+				RHS.setElementAt(token, i-1);
+				RHS.remove(i+1);
+				RHS.remove(i);
+			}
+		}
+		return RHS;
 	}
 	
+	// step 4: replace addition.subtration with their resulting types
+	private static Vector<String> reduceAddSub(Vector<String> RHS){
+		String token;
+		for(int i = 0; i < RHS.size(); ++i){
+			token = RHS.elementAt(i);
+			if(isAddSymbol(token)){
+				String augend = RHS.elementAt(i-1);
+				String addend = RHS.elementAt(i+1);
+				
+				if(augend.equals(addend)){
+					token = augend;
+					// replace all three with type
+				}else if(   (augend.equals("double") && addend.equals("int") )||
+						(augend.equals("int")&& addend.equals("double") ) ){
+					// double-?? math, always widening
+					// TODO narrowing on assignment must be checked
+					token = "double";
+				}else{
+					// error on expression type (2), clear and return error
+					PrintError(2, augend + ", " + addend);
+					RHS.clear();
+					RHS.add("Error2");
+					return RHS;
+				}
+				RHS.setElementAt(token, i-1);
+				RHS.remove(i+1);
+				RHS.remove(i);
+			}
+		}
+		return RHS;
+	}
+	
+	// step 5: replace equality symbols with their types
+	private static Vector<String> reduceEquality(Vector<String> RHS){
+		String token;
+		for(int i = 0; i < RHS.size(); ++i){
+			token = RHS.elementAt(i);
+			if(isEqualitySymbol(token)){
+				String LHSType = RHS.elementAt(i-1);
+				String RHSType = RHS.elementAt(i+1);
+				
+				if(LHSType.equals(RHSType)){
+					token = "bool";
+					// replace all three with type
+				}else if(LHSType.equals("double") || RHSType.equals("double")){
+					// double-?? compare, always widening
+					token = "bool";
+					// TODO narrowing on assignment must be checked
+				}else{
+					// error condition, clear and return error
+					PrintError(2, LHSType + ", " + RHSType);
+					RHS.clear();
+					RHS.add("Error2");
+					return RHS;
+				}
+				RHS.setElementAt(token, i-1);
+				RHS.remove(i+1);
+				RHS.remove(i);
+			}
+		}
+		return RHS;
+	}
+	
+	private static boolean isEqualitySymbol(String token){
+		boolean retVal = false;
+		if(token.matches("==|>=|>|<=|<"))
+			retVal = true;
+		return retVal;
+	}
+	
+	private static boolean isAddSymbol(String token){
+		boolean retVal = false;
+		if(token.equals("+") || token.equals("-"))
+			retVal = true;
+		return retVal;
+	}
 
+	private static boolean isMultSymbol(String token){
+		boolean retVal = false;
+		if(token.equals("*") || token.equals("/"))
+			retVal = true;
+		return retVal;
+	}
+	
 	private static boolean isValidIdentifier(String token){
 		boolean retVal = false;
 		if(token.matches("[a-zA-Z]+"))
@@ -199,18 +374,21 @@ public class TypeCheck {
 	}
 	
 	private static void PrintError(int errorNum, String message){
+		if(debugMode){message = ("(\"" + message + "\")");}
+		else message = "";
+		
 		switch (errorNum){
 		case 1: 
-			System.out.println("ERROR 1: Undeclared identifier in expression (\"" + message + "\")");
+			System.out.println("ERROR 1: Undeclared identifier in expression" + message);
 			break;
 		case 2: 
-			System.out.println("ERROR 2: Type Mispatch in expression (\"" + message + "\")");
+			System.out.println("ERROR 2: Type Mispatch in expression" + message);
 			break;
 		case 3: 
-			System.out.println("ERROR 3: Type Mispatch in assignment (\"" + message + "\")");
+			System.out.println("ERROR 3: Type Mispatch in assignment" + message);
 			break;
 		default: 
-			System.out.println("ERROR 4: General formatting error (\"" + message + "\")");
+			System.out.println("ERROR 4: General formatting error" + message);
 		}
 	}
 	
@@ -229,6 +407,16 @@ public class TypeCheck {
 			System.out.println("NumberFormatException: " + nfe.getMessage());
 		}
 		return retVal;
+	}
+	
+	private static Vector<String> convertTokenedStringToVector(StringTokenizer tokenedString){
+		Vector<String> RHS = new Vector<String>();
+		while(tokenedString.hasMoreTokens()){
+			/* build RHS putting tokens into a vector to send to 
+			 * OrderOfOperations parsing functions */
+			RHS.add(tokenedString.nextToken());
+		}
+		return RHS;
 	}
 	
 /* TODO:  I should delete this, but I'm a pack rat for the moment.  DELETE ME LATER		
