@@ -3,4 +3,6 @@ This project will implement a type-checking algorithm based on a provided langua
 This program is written in Java using jre7.  
 
 Instructions:
-To run this program: 
+To compile this program: javac TypeCheck.java
+To run this program with the file "input.txt" (default file): java TypeCheck
+To run this program with an alternate file, "program.txt": java TypeCheck program.txt
