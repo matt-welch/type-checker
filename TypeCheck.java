@@ -1,24 +1,42 @@
+/*******************************************************************************
+ * FILENAME:    TypeCheck.java
+ * DESCRIPTION: Type Checking Parser
+ * AUTHOR:      James Matthew Welch [JMW]
+ * SCHOOL:      Arizona State University
+ * CLASS:       CSE340: Principles of Programming Languages
+ * INSTRUCTOR:  Dr. Toni Farley
+ * SECTION:     27199
+ * TERM:        Spring 2012
+ ******************************************************************************/
+/* :::Program Description:::
+ * This project will implement a type-checking algorithm based on a provided 
+ * language description. The Type Checker will read in a program stored in a 
+ * text file, and output the type-checking results. It will use the ideas from 
+ * Hindley-Milner type checking to infer types of expressions, and determine 
+ * the type correctness of the program. The procedures will process expressions
+ * using the correct order of operations, and keep track of intermediate types
+ * during processing. This program is written in Java using jre7. */
 
 import java.util.*;// Scanner, Map, Vector
-//import java.util.regex.Pattern;
 import java.io.*;
 
 public class TypeCheck {
 
 	public static Scanner keyboard;
 	
-	public enum DataType{ 
+/*	public enum DataType{ 
 		NONE, BOOL, INT, DOUBLE, STRING, BOOLARR, INTARR, DOUBLEARR, STRINGARR
 		}
 	
 	private static Map<String, DataType> identifierMap = new HashMap<String, DataType>();
+*/
 	private static Map<String, String> identifierStrMap = new HashMap<String, String>();
 	private static Map<String, Integer> arraySizesMap = new HashMap<String, Integer>();
-	
+	private static boolean debugMode = true;
+		
 	public static void main(String[] args) {
 		// read the program input file in from the command line
-		boolean debugMode = true;
-		
+
 		String filename;
 		if(args.length > 0){
 			filename = args[0];
@@ -59,10 +77,10 @@ public class TypeCheck {
 		
 		String token, strDataType, identifier;
 		// parse through each line in the input file
-		int counter = 0, arrayIndex;
+		int lineCounter = 0, arrayIndex;
 		StringTokenizer tokenedString;
 		while(!inputFileLines.isEmpty()){
-			if(debugMode) System.out.println("Line(" + counter + "):" + inputFileLines.firstElement());
+			if(debugMode) System.out.println("Line(" + lineCounter + "): \"" + inputFileLines.firstElement() + "\"");
 			
 			strLine = inputFileLines.firstElement();
 			tokenedString = new StringTokenizer(strLine);
@@ -70,7 +88,6 @@ public class TypeCheck {
 			
 			// get the first token in the string.  
 			strDataType = tokenedString.nextToken();
-			if(debugMode) System.out.println("\tTOKEN:: \"" + strDataType + "\"");
 			
 			// check if it's an array
 			if(strDataType.contains("[")){
@@ -81,6 +98,8 @@ public class TypeCheck {
 			
 			// check if a type or not.  if so, parse as declaration, if not parse as definition
 			if(validTypes.contains(strDataType)){// strDataType is a valid data type
+				if(debugMode) System.out.println("\tTYPE:\"" + strDataType + "\"");
+
 				// ensure more tokens on line
 				if (tokenedString.hasMoreTokens()) {
 					// add declaration to map, if array, add size to array-map
@@ -102,25 +121,179 @@ public class TypeCheck {
 				}
 				
 				
-			}else{
-				// else (line doesn't lead with a type declaration, so it must be a definition
-
+			}else{// line doesn't lead with a type declaration, so it must be a definition/expression 
 				
+				// reassign first token in definition as LHS of expression
+				String LHSToken = strDataType;
+				if(debugMode) System.out.println("\tEXPRESSION:: \"" + LHSToken + "\""); 
 				
+				// retrieve the type string from the map
+				String LHSType = identifierStrMap.get(LHSToken);
 				
+				// check for equals,
+				token = tokenedString.nextToken();
+				if(!token.equals("=") ){// make sure "=" is present
+					PrintError(4,"No \"=\" sign present after assignment variable");
+				}
 				
+				/////parse RHS of the assignment/////
+				// 	convert tokened string to vector
+				Vector<String> RHS = convertTokenedStringToVector(tokenedString); 
+				
+				// reduce the expression on the RHS to a single type
+				String RHSType = getRHSType(RHS);
+								
+				// check LHS DataType against RHS DataType
+				if(LHSType == RHSType){
+					System.out.println(LHSType);
+				}else{
+					PrintError(3, LHSToken);
+				}
 			}
-			
-
 			// increment counter to next line
-			counter++;
+			lineCounter++;
 			// remove the line from the vector of lines
 			inputFileLines.remove(0);
 		}
+		// end of program
+	}
+
+	private static Vector<String> convertTokenedStringToVector(StringTokenizer tokenedString){
+		Vector<String> RHS = new Vector<String>();
+		while(tokenedString.hasMoreTokens()){
+			/* build RHS putting tokens into a vector to send to 
+			 * OrderOfOperations parsing functions */
+			RHS.add(tokenedString.nextToken());
+		}
+		return RHS;
+	}
+	
+	private static String getRHSType(Vector<String> RHS){
+		while(!RHS.isEmpty()){
+			// reduce array indices
+			
+			// reduce mult/div
+			
+			// reduce add/sub
+					
+			// reduce <,>,=,>=,<=
+			if(debugMode) System.out.println("\tTOKEN:\"" + RHS.firstElement() + "\"");
+			RHS.remove(0);
+		}
+		
+		return "";
+	}
+	
+
+	private static boolean isValidIdentifier(String token){
+		boolean retVal = false;
+		if(token.matches("[a-zA-Z]+"))
+			retVal = true;
+		return retVal;
+	}
+	
+	private static String stripArrayBrackets(String token){
+		// strip token of brackets
+		token = token.substring(0, token.indexOf("["));
+		return token;
+	}
+	
+	private static void PrintError(int errorNum, String message){
+		switch (errorNum){
+		case 1: 
+			System.out.println("ERROR 1: Undeclared identifier in expression (\"" + message + "\")");
+			break;
+		case 2: 
+			System.out.println("ERROR 2: Type Mispatch in expression (\"" + message + "\")");
+			break;
+		case 3: 
+			System.out.println("ERROR 3: Type Mispatch in assignment (\"" + message + "\")");
+			break;
+		default: 
+			System.out.println("ERROR 4: General formatting error (\"" + message + "\")");
+		}
+	}
+	
+	private static int findArrayIndex(String token){
+		int LBindex = token.indexOf("[");
+		int RBindex = token.indexOf("]");
+		int retVal = 0;
+		try{
+			// the String to int conversion happens here
+			retVal = Integer.parseInt(token.substring(LBindex+1, RBindex));
+			// print out the value after the conversion
+			if(debugMode) System.out.println("\tarray index = " + retVal);
+
+		} catch (NumberFormatException nfe)
+		{
+			System.out.println("NumberFormatException: " + nfe.getMessage());
+		}
+		return retVal;
+	}
+	
+/* TODO:  I should delete this, but I'm a pack rat for the moment.  DELETE ME LATER		
+ *
+	private static DataType getDataType(String token){
+		DataType retVal = DataType.NONE; 
+		if(token.equals("int")){
+			retVal = DataType.INT;
+		}else if(token.equals("bool") ){
+			retVal = DataType.BOOL;
+		}else if(token.equals("string") ){
+			retVal = DataType.STRING;
+		}else if(token.equals("double") ){
+			retVal = DataType.DOUBLE;
+		}else if(token.matches("int\\[\\d+\\]") ){
+			retVal = DataType.INTARR;
+		}else if(token.matches("bool\\[\\d+\\]")){
+			retVal = DataType.BOOLARR;
+		}else if(token.matches("double\\[\\d+\\]")){
+			retVal = DataType.DOUBLEARR;
+		}else if(token.matches("string\\[\\d+\\]")){
+			retVal = DataType.STRINGARR;
+		}
+		return retVal;
+	}
+		
+	private static DataType CheckRHSType(Vector<String> RHS){
+		DataType retVal;
+		// reduce array indices
+		
+		// reduce mult/div
+		
+		// reduce add/sub
+				
+		// reduce <,>,=,>=,<=
 		
 		
-		
-		
+		DataType finalType = getDataType("int");
+		retVal = finalType;
+		return retVal;
+	}
+	
+	private static boolean IsArrayType(DataType thisType){
+		boolean retVal = false;
+		if(thisType.ordinal()>4) 
+			retVal = true;
+		return retVal;
+	}
+	
+	private static String getSimpleType(DataType LHS){
+	
+		String retVal = "none";
+		if(LHS == DataType.BOOL || LHS == DataType.BOOLARR){
+			retVal = "bool";
+		}else if(LHS == DataType.INT || LHS == DataType.INTARR){
+			retVal = "int";
+		}else if(LHS == DataType.DOUBLE || LHS == DataType.DOUBLEARR){
+			retVal = "double";
+		}else if(LHS == DataType.STRING || LHS == DataType.STRINGARR){
+			retVal = "string";
+		}
+		return retVal;
+	}
+
+	// snippet from main()
 		try {
 			FileInputStream inFile = new FileInputStream(filename);
 			DataInputStream inData = new DataInputStream(inFile);
@@ -203,8 +376,8 @@ public class TypeCheck {
 							}
 							
 							// send RHS vector to function to reduce
-							DataType RHStype = CheckRHSType(RHS); 
-							
+//							DataType RHStype = CheckRHSType(RHS); 
+							DataType RHStype = DataType.INT;
 							// check LHS DataType against RHS DataType
 							if(LHStype == RHStype){
 								System.out.println(getSimpleType(LHStype));
@@ -225,116 +398,5 @@ public class TypeCheck {
 		} catch (IOException e) {
 			System.err.println("Error: " + e.getMessage());
 		}
-
-		
-	}
-
-	
-	private static String getSimpleType(DataType LHS){
-		
-		String retVal = "none";
-		if(LHS == DataType.BOOL || LHS == DataType.BOOLARR){
-			retVal = "bool";
-		}else if(LHS == DataType.INT || LHS == DataType.INTARR){
-			retVal = "int";
-		}else if(LHS == DataType.DOUBLE || LHS == DataType.DOUBLEARR){
-			retVal = "double";
-		}else if(LHS == DataType.STRING || LHS == DataType.STRINGARR){
-			retVal = "string";
-		}
-		return retVal;
-	}
-	
-	private static DataType CheckRHSType(Vector<String> RHS){
-		DataType retVal;
-		// reduce array indices
-		
-		// reduce mult/div
-		
-		// reduce add/sub
-				
-		// reduce <,>,=,>=,<=
-		
-		
-		String finalType = "int";
-		retVal =  getDataType(finalType);
-		return retVal;
-	}
-	
-	private static boolean IsArrayType(DataType thisType){
-		boolean retVal = false;
-		if(thisType.ordinal()>4) 
-			retVal = true;
-		return retVal;
-	}
-	
-	private static boolean isValidIdentifier(String token){
-		boolean retVal = false;
-		if(token.matches("[a-zA-Z]+"))
-			retVal = true;
-		return retVal;
-	}
-	
-	private static String stripArrayBrackets(String token){
-		// strip token of brackets
-		token = token.substring(0, token.indexOf("["));
-		return token;
-	}
-	
-	private static void PrintError(int errorNum, String message){
-		switch (errorNum){
-		case 1: 
-			System.out.println("ERROR 1: Undeclared identifier in expression (\"" + message + "\")");
-			break;
-		case 2: 
-			System.out.println("ERROR 2: Type Mispatch in expression (\"" + message + "\")");
-			break;
-		case 3: 
-			System.out.println("ERROR 3: Type Mispatch in assignment (\"" + message + "\")");
-			break;
-		default: 
-			System.out.println("ERROR 4: General formatting error (\"" + message + "\")");
-		}
-	}
-	
-	private static int findArrayIndex(String token){
-		int LBindex = token.indexOf("[");
-		int RBindex = token.indexOf("]");
-		int retVal = 0;
-		try{
-			// the String to int conversion happens here
-			retVal = Integer.parseInt(token.substring(LBindex+1, RBindex));
-			// print out the value after the conversion
-			System.out.println("\tarray index = " + retVal);
-
-		} catch (NumberFormatException nfe)
-		{
-			System.out.println("NumberFormatException: " + nfe.getMessage());
-		}
-		return retVal;
-	}
-
-	
-	private static DataType getDataType(String token){
-		DataType retVal = DataType.NONE; 
-		if(token.equals("int")){
-			retVal = DataType.INT;
-		}else if(token.equals("bool") ){
-			retVal = DataType.BOOL;
-		}else if(token.equals("string") ){
-			retVal = DataType.STRING;
-		}else if(token.equals("double") ){
-			retVal = DataType.DOUBLE;
-		}else if(token.matches("int\\[\\d+\\]") ){
-			retVal = DataType.INTARR;
-		}else if(token.matches("bool\\[\\d+\\]")){
-			retVal = DataType.BOOLARR;
-		}else if(token.matches("double\\[\\d+\\]")){
-			retVal = DataType.DOUBLEARR;
-		}else if(token.matches("string\\[\\d+\\]")){
-			retVal = DataType.STRINGARR;
-		}
-		return retVal;
-	}
-
+		*/
 }
