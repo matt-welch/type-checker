@@ -22,19 +22,11 @@ import java.io.*;
 
 public class TypeCheck {
 
-	public static Scanner keyboard;
-	
-/*	public enum DataType{ 
-		NONE, BOOL, INT, DOUBLE, STRING, BOOLARR, INTARR, DOUBLEARR, STRINGARR
-		}
-	
-	private static Map<String, DataType> identifierMap = new HashMap<String, DataType>();
-*/
-	private static Map<String, String> identifierStrMap = new HashMap<String, String>();
+	// shared/global data structures
+	private static Map<String, String> symbolTable = new HashMap<String, String>();
 	private static Map<String, Integer> arraySizesMap = new HashMap<String, Integer>();
 	private static boolean debugMode = false;
 	private static HashSet<String> validTypes = new HashSet<String>();
-	static int LHSArraySize = 0;
 	
 	public static void main(String[] args) {
 		// read the program input file in from the command line
@@ -47,6 +39,7 @@ public class TypeCheck {
 		
 		// read in all of the lines from the input "source code" file into a vector of strings
 		// do this first for program stability - read first then parse
+		// Inefficient, but try/catch is smaller
 		Vector<String> inputFileLines = new Vector<String>();
 		String strLine;
 		try{
@@ -83,6 +76,7 @@ public class TypeCheck {
 		// parse through each line in the input file
 		int lineCounter = 0, arrayIndex;
 		StringTokenizer tokenedString;
+		int LHSArraySize = 0;
 		while(!inputFileLines.isEmpty()){
 			if(debugMode) System.out.println("Line(" + (lineCounter+1) + "): \"" + inputFileLines.firstElement() + "\"");
 			
@@ -116,7 +110,7 @@ public class TypeCheck {
 					// check the token against regex to verify it's valid
 					if(isValidIdentifier(identifier)){
 						// place token in map with appropriate token type
-						identifierStrMap.put(identifier, strDataType);
+						symbolTable.put(identifier, strDataType);
 						if(debugMode) System.out.println("\t\tAdded to identifier map as \""+ strDataType + "\" type");
 						
 						//add to array map if array
@@ -133,7 +127,7 @@ public class TypeCheck {
 				if(debugMode) System.out.println("\tEXPRESSION:: \"" + LHSToken + "\""); 
 				
 				// retrieve the type string from the map
-				String LHSType = identifierStrMap.get(LHSToken);
+				String LHSType = symbolTable.get(LHSToken);
 				if(LHSType.contains("arr")){
 					// this is whole-array math e.g. a = a + b, where they're whole arrays
 					if(arrayIndex == 0){
@@ -146,7 +140,7 @@ public class TypeCheck {
 					}
 				}
 				
-				// check for equals,
+				// check for equals, this is not required by the assignment, but it's a good idea anyway
 				token = tokenedString.nextToken();
 				if(!token.equals("=") ){// make sure "=" is present
 					PrintError(4,"No \"=\" sign present after assignment variable");
@@ -182,7 +176,9 @@ public class TypeCheck {
 					int index = LHSType.indexOf("arr");
 					LHSType = LHSType.substring(0, index);
 					System.out.println(LHSType);
-
+					/* KNOWN BUG: if array types are compared, should produce an 
+					 * array type, but the assignment did not describe the output 
+					 * for this case so just printing the simple-type of the array */ 
 				}else{
 					PrintError(3, LHSToken);
 				}
@@ -220,7 +216,6 @@ public class TypeCheck {
 		if(RHS.size() == 1){
 			retVal = RHS.get(0);
 		}
-
 		return retVal;
 	}
 
@@ -236,9 +231,9 @@ public class TypeCheck {
 				// this is an array reference, strip brackets & parse array index
 				token = stripArrayBrackets(token);
 				if(isValidIdentifier(token)){
-					if(identifierStrMap.containsKey( token ) ){
+					if(symbolTable.containsKey( token ) ){
 						RHS.remove(i);
-						String dataType = identifierStrMap.get(token);
+						String dataType = symbolTable.get(token);
 						if( dataType.contains("arr") ){
 							dataType = dataType.substring(0,dataType.indexOf("arr"));
 						}
@@ -262,9 +257,9 @@ public class TypeCheck {
 			token = RHS.elementAt(i);
 			if(!validTypes.contains(token)){// ensure not already been replaced as arrayRef
 				if(isValidIdentifier(token)){
-					if(identifierStrMap.containsKey( token ) ){
+					if(symbolTable.containsKey( token ) ){
 						RHS.remove(i);
-						String dataType = identifierStrMap.get(token);
+						String dataType = symbolTable.get(token);
 						if(dataType.contains("arr"))
 							dataType = dataType + arraySizesMap.get(token);
 						if(debugMode) System.out.println("\tTOKEN:\"" + token + "\" replaced with \""+ dataType +"\"");
