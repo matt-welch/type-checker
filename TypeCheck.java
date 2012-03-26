@@ -34,10 +34,10 @@ public class TypeCheck {
 	private static Map<String, Integer> arraySizesMap = new HashMap<String, Integer>();
 	private static boolean debugMode = false;
 	private static HashSet<String> validTypes = new HashSet<String>();
+	static int LHSArraySize = 0;
 	
 	public static void main(String[] args) {
 		// read the program input file in from the command line
-
 		String filename;
 		if(args.length > 0){
 			filename = args[0];
@@ -74,31 +74,38 @@ public class TypeCheck {
 		validTypes.add("int");
 		validTypes.add("double");
 		validTypes.add("string");
-		
-		
+		validTypes.add("boolarr");
+		validTypes.add("intarr");
+		validTypes.add("doublearr");
+		validTypes.add("stringarr");
+			
 		String token, strDataType, identifier;
 		// parse through each line in the input file
 		int lineCounter = 0, arrayIndex;
 		StringTokenizer tokenedString;
 		while(!inputFileLines.isEmpty()){
-			if(debugMode) System.out.println("Line(" + lineCounter + "): \"" + inputFileLines.firstElement() + "\"");
+			if(debugMode) System.out.println("Line(" + (lineCounter+1) + "): \"" + inputFileLines.firstElement() + "\"");
 			
 			strLine = inputFileLines.firstElement();
 			tokenedString = new StringTokenizer(strLine);
 			arrayIndex = 0;
+			LHSArraySize  = 0;
 			
 			// get the first token in the string.  
-			strDataType = tokenedString.nextToken();
+			token = tokenedString.nextToken();
 			
 			// check if it's an array
-			if(strDataType.contains("[")){
+			if(token.contains("[")){
 				// this is an array, strip brackets & parse array index
-				arrayIndex = findArrayIndex(strDataType);
-				strDataType = stripArrayBrackets(strDataType);
+				arrayIndex = findArrayIndex(token);
+				token = stripArrayBrackets(token);
 			}
 			
 			// check if a type or not.  if so, parse as declaration, if not parse as definition
-			if(validTypes.contains(strDataType)){// strDataType is a valid data type
+			if(validTypes.contains(token)){// strDataType is a valid data type
+				strDataType = token;
+				if(arrayIndex > 0)
+					strDataType = strDataType + "arr";
 				if(debugMode) System.out.println("\tTYPE:\"" + strDataType + "\"");
 				// ensure more tokens on line
 				if (tokenedString.hasMoreTokens()) {
@@ -122,30 +129,60 @@ public class TypeCheck {
 			}else{// line doesn't lead with a type declaration, so it must be a definition/expression 
 				
 				// reassign first token in definition as LHS of expression
-				String LHSToken = strDataType;
+				String LHSToken = token;
 				if(debugMode) System.out.println("\tEXPRESSION:: \"" + LHSToken + "\""); 
 				
 				// retrieve the type string from the map
 				String LHSType = identifierStrMap.get(LHSToken);
+				if(LHSType.contains("arr")){
+					// this is whole-array math e.g. a = a + b, where they're whole arrays
+					if(arrayIndex == 0){
+						// array type, look up size
+						LHSArraySize = arraySizesMap.get(LHSToken); 
+						LHSType = LHSType + LHSArraySize;
+					}else{
+						// this is an array reference (e.g. a[1])
+						LHSType = LHSType.substring(0,LHSType.indexOf("arr"));
+					}
+				}
 				
 				// check for equals,
 				token = tokenedString.nextToken();
 				if(!token.equals("=") ){// make sure "=" is present
 					PrintError(4,"No \"=\" sign present after assignment variable");
+					// increment counter to next line
+					lineCounter++;
+					// remove the line from the vector of lines
+					inputFileLines.remove(0);
+					continue;
 				}
 				
 				/////parse RHS of the assignment/////
 				// 	convert tokened string to vector
-				Vector<String> RHS = convertTokenedStringToVector(tokenedString); 
+				Vector<String> RHS = convertTokenedStringToVector(tokenedString);
 				
 				// reduce the expression on the RHS to a single type
 				String RHSType = getRHSType(RHS);
 								
 				// check LHS DataType against RHS DataType
 				if(LHSType.equals(RHSType)){
+					// no errors, typical situation
+					if(LHSType.contains("arr")){
+						int index = LHSType.indexOf("arr");
+						LHSType = LHSType.substring(0, index);
+					}
 					System.out.println(LHSType);
 				}else if(RHSType.equals("Error1") || RHSType.equals("Error2")){
 					// do nothing since error was caught in getRHSType()
+				}else if(LHSType.equals("double") && RHSType.equals("int") ){
+					// widening conversion on assignment, type is double
+					System.out.println(LHSType);
+				}else if(LHSType.contains("doublearr") && RHSType.contains("intarr")){
+					// check for double array and int array
+					int index = LHSType.indexOf("arr");
+					LHSType = LHSType.substring(0, index);
+					System.out.println(LHSType);
+
 				}else{
 					PrintError(3, LHSToken);
 				}
@@ -196,22 +233,22 @@ public class TypeCheck {
 			
 			// check if it's an array
 			if(token.contains("[")){
-				// this is an array, strip brackets & parse array index
-//				int arrayIndex = findArrayIndex(token);
+				// this is an array reference, strip brackets & parse array index
 				token = stripArrayBrackets(token);
-			}
-			
-			// TODO: should check array sizes at some point too
-			if(isValidIdentifier(token)){
-				if(identifierStrMap.containsKey( token ) ){
-					RHS.remove(i);
-					String dataType = identifierStrMap.get(token);
-					if(debugMode) System.out.println("\tTOKEN:\"" + tokenOrig + "\" replaced with \""+ dataType +"\"");
-					RHS.insertElementAt(dataType, i);
-				}else{
-					PrintError(1, tokenOrig);
-					RHS.clear();
-					RHS.add("Error1");
+				if(isValidIdentifier(token)){
+					if(identifierStrMap.containsKey( token ) ){
+						RHS.remove(i);
+						String dataType = identifierStrMap.get(token);
+						if( dataType.contains("arr") ){
+							dataType = dataType.substring(0,dataType.indexOf("arr"));
+						}
+						if(debugMode) System.out.println("\tTOKEN:\"" + tokenOrig + "\" replaced with \""+ dataType +"\"");
+						RHS.insertElementAt(dataType, i);
+					}else{
+						PrintError(1, tokenOrig);
+						RHS.clear();
+						RHS.add("Error1");
+					}
 				}
 			}
 		}
@@ -228,6 +265,8 @@ public class TypeCheck {
 					if(identifierStrMap.containsKey( token ) ){
 						RHS.remove(i);
 						String dataType = identifierStrMap.get(token);
+						if(dataType.contains("arr"))
+							dataType = dataType + arraySizesMap.get(token);
 						if(debugMode) System.out.println("\tTOKEN:\"" + token + "\" replaced with \""+ dataType +"\"");
 						RHS.insertElementAt(dataType, i);
 					}else{
@@ -256,8 +295,7 @@ public class TypeCheck {
 				}else if( (Lfactor.equals("double") && Rfactor.equals("int")) || 
 						(Lfactor.equals("int") && Rfactor.equals("double")) )
 				{	// double-int math is always widening
-					// TODO narrowing on assignment must be checked
-					token = "double";
+						token = "double";
 				}else{
 					// error on expression type (2), clear and return error
 					PrintError(2, Lfactor + ", " + Rfactor);
@@ -287,8 +325,7 @@ public class TypeCheck {
 					// replace all three with type
 				}else if(   (augend.equals("double") && addend.equals("int") )||
 						(augend.equals("int")&& addend.equals("double") ) ){
-					// double-?? math, always widening
-					// TODO narrowing on assignment must be checked
+					// double-int math, always widening
 					token = "double";
 				}else{
 					// error on expression type (2), clear and return error
@@ -317,10 +354,10 @@ public class TypeCheck {
 				if(LHSType.equals(RHSType)){
 					token = "bool";
 					// replace all three with type
-				}else if(LHSType.equals("double") || RHSType.equals("double")){
-					// double-?? compare, always widening
+				}else if(LHSType.equals("double") && RHSType.equals("int") ||
+						LHSType.equals("int") && RHSType.equals("double")){
+					// double-int compare, always widening
 					token = "bool";
-					// TODO narrowing on assignment must be checked
 				}else{
 					// error condition, clear and return error
 					PrintError(2, LHSType + ", " + RHSType);
@@ -379,10 +416,10 @@ public class TypeCheck {
 			System.out.println("ERROR 1: Undeclared identifier in expression" + message);
 			break;
 		case 2: 
-			System.out.println("ERROR 2: Type Mispatch in expression" + message);
+			System.out.println("ERROR 2: Type mismatch in expression" + message);
 			break;
 		case 3: 
-			System.out.println("ERROR 3: Type Mispatch in assignment" + message);
+			System.out.println("ERROR 3: Type mismatch in assignment" + message);
 			break;
 		default: 
 			System.out.println("ERROR 4: General formatting error" + message);
